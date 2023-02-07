@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    name: Build and release
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.base_ref }}
+
+      - name: Compute next SemVer tag
+        id: semver
+        uses: gerwazy102/semver-release-action@master
+        with:
+          release_branch: master
+          release_strategy: none
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: "arm64,arm,x86_64"
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: |
+            gerwazy102/netcat:latest
+            gerwazy102/netcat:${{ steps.semver.outputs.tag }}
+
+      - name: Create release
+        id: tag
+        uses: gerwazy102/semver-release-action@master
+        with:
+          release_branch: master
+          tag: ${{ steps.semver.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
